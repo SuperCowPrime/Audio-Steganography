@@ -22,9 +22,116 @@ Unlike cryptography (which scrambles content), steganography hides the very *exi
 Fin-Project-Audio/
 ├── fin project/
 │   └── audio_steganography.py   # Core steganography library
-├── stego_web_app.zip            # Flask web demo (unzip to run)
+├── stego_web_app.zip            # Flask web app (source, requires Python)
 └── powerpoint                   # Project presentation slides
 ```
+
+The web app folder (inside `stego_web_app.zip`) looks like this:
+
+```
+stego_web_app/
+├── main.py                      # App launcher — starts server & opens browser
+├── audio_steganography.py       # Core steganography library
+├── app.py                       # Flask routes
+├── StegoSound.spec              # PyInstaller config (for building .exe)
+├── build.bat                    # Windows build script → produces StegoSound.exe
+├── build.sh                     # macOS/Linux build script
+├── requirements.txt             # Python dependencies
+└── templates/
+    └── index.html               # Web UI
+```
+
+---
+
+## Running the App — 3 Options
+
+### Option 1 — Double-click `.exe` (Windows, no Python needed) ⭐ Easiest
+
+> Use this if you just want to run the app without installing anything.
+
+1. Download **`StegoSound.exe`** from the [Releases](../../releases) page
+2. Double-click it
+3. A browser tab opens at `http://localhost:5000` automatically
+4. When done, close the console window to stop the server
+
+Output files are saved in an `outputs/` folder next to the `.exe`.
+
+---
+
+### Option 2 — Build the `.exe` yourself (requires Python once)
+
+> Use this if you want to create the `.exe` from source.
+
+**Prerequisites:** Python 3.9+ installed ([python.org](https://python.org))
+
+```bash
+# 1. Clone the repo and unzip the web app
+git clone https://github.com/SuperCowPrime/Fin-Project-Audio.git
+cd Fin-Project-Audio
+unzip stego_web_app.zip
+cd stego_web_app
+```
+
+**Windows:**
+```
+build.bat
+```
+
+**macOS / Linux:**
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+The build takes about 1–2 minutes. The result is:
+- **Windows:** `dist/StegoSound.exe`
+- **macOS/Linux:** `dist/StegoSound`
+
+Double-click (or run) that file — no Python needed from that point on.
+
+---
+
+### Option 3 — Run directly with Python
+
+> Use this if you're a developer and already have Python set up.
+
+```bash
+# 1. Clone and unzip
+git clone https://github.com/SuperCowPrime/Fin-Project-Audio.git
+cd Fin-Project-Audio
+unzip stego_web_app.zip
+cd stego_web_app
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Run
+python main.py
+```
+
+The app will print a link and open `http://localhost:5000` in your browser automatically. Press `Ctrl+C` in the terminal to stop it.
+
+---
+
+## How to Use the Web App
+
+### Encode (hide a secret)
+
+1. **Upload a WAV file** as the audio carrier
+2. **Choose what to hide** — a text message or a grayscale image
+3. **Choose a protocol:**
+   - **Addition** — better audio quality (SNR ~74 dB), but decoding requires the original audio file
+   - **Override** — slightly lower quality (SNR ~18 dB), but decoding works without the original
+4. Click **Generate Stego-Audio** — the file downloads automatically
+
+### Decode (extract the secret)
+
+1. **Select the same protocol** you used when encoding
+2. **Upload the stego-audio file**
+3. If you used **Addition**, also upload the original carrier audio
+4. Click **Extract Hidden Data** — the text or image appears on screen
+
+> ⚠️ The decryption keys (Hénon / Arnold settings) must match what was used during encoding. Default values work if you didn't change them.
 
 ---
 
@@ -32,7 +139,7 @@ Fin-Project-Audio/
 
 ### Step 1 — Chaotic Encryption (3 layers)
 
-Before embedding, the payload is encrypted using three chaotic maps applied in sequence:
+Before embedding, the payload is encrypted using three chaotic maps in sequence:
 
 | Map | What it does |
 |-----|-------------|
@@ -75,95 +182,48 @@ mode (1B) | payload_len (4B) | grid_side (4B) | img_H (4B) | img_W (4B) | n_bits
 
 ---
 
-## Quick Start
+## Python API
 
-### Requirements
-
-```bash
-pip install numpy pywt Pillow
-```
-
-### Hide a text message
+You can also use the library directly in your own Python scripts:
 
 ```python
 import soundfile as sf
-from audio_steganography import embed_addition, decode_addition
+import numpy as np
+from PIL import Image
+from audio_steganography import (
+    embed_addition, decode_addition,
+    embed_override, decode_override,
+)
 
-# Load cover audio
 audio, sr = sf.read("cover.wav")
 
-# Embed
+# --- Hide text (Addition) ---
 stego = embed_addition(audio, secret="Hello, hidden world!")
 sf.write("stego.wav", stego, sr)
 
-# Decode (needs original)
 original, _ = sf.read("cover.wav")
-message = decode_addition(stego, original)
-print(message)  # "Hello, hidden world!"
-```
+print(decode_addition(stego, original))   # "Hello, hidden world!"
 
-### Hide an image
-
-```python
-import numpy as np
-from PIL import Image
-
-img = np.array(Image.open("secret.png").convert("L"))  # grayscale
+# --- Hide an image (Addition) ---
+img = np.array(Image.open("secret.png").convert("L"))
 stego = embed_addition(audio, secret=img)
+recovered = decode_addition(stego, original)
+Image.fromarray(recovered.astype(np.uint8)).save("recovered.png")
 
-recovered_img = decode_addition(stego, original)
-Image.fromarray(recovered_img.astype(np.uint8)).save("recovered.png")
-```
-
-### Override method (no original needed to decode)
-
-```python
-from audio_steganography import embed_override, decode_override
-
+# --- Override (no original needed to decode) ---
 stego = embed_override(audio, secret="Blind decode message")
-message = decode_override(stego)  # no original required
+print(decode_override(stego))
 ```
-
----
-
-## Web App
-
-A Flask-based web interface is included in `stego_web_app.zip`.
-
-```bash
-unzip stego_web_app.zip
-cd stego_web_app
-pip install flask numpy pywt Pillow
-python app.py
-```
-
-Then open `http://localhost:5000` to upload audio, embed a secret, and download the stego file.
-
----
-
-## API Reference
-
-### `embed_addition(cover_audio, secret, alpha, wavelet, dwt_level, encrypt, henon_params, arnold_iterations)`
-Embeds payload by adding to DWT coefficients. Returns stego audio array.
-
-### `decode_addition(stego_audio, original_audio, wavelet, dwt_level, decrypt, henon_params, arnold_iterations)`
-Decodes payload by comparing stego and original DWT bands. Returns `str` or `np.ndarray`.
-
-### `embed_override(cover_audio, secret, ...)`
-Embeds payload by replacing DWT coefficients. Returns stego audio array.
-
-### `decode_override(stego_audio, ...)`
-Decodes payload from stego audio alone — no original needed. Returns `str` or `np.ndarray`.
 
 ### Quality metrics
 
 ```python
 from audio_steganography import compute_audio_snr, compute_psnr, compute_mse, text_match_score
 
-snr   = compute_audio_snr(original, stego)      # dB — higher is better
-psnr  = compute_psnr(orig_img, recovered_img)   # dB — higher is better
-mse   = compute_mse(orig_img, recovered_img)    # lower is better
-score = text_match_score(original_text, recovered_text)  # 0–100%
+snr   = compute_audio_snr(original, stego)       # dB — higher is better
+psnr  = compute_psnr(orig_img, recovered_img)    # dB — higher is better
+mse   = compute_mse(orig_img, recovered_img)     # lower is better
+score = text_match_score(original_text, decoded)  # 0–100%
 ```
 
 ---
@@ -191,4 +251,4 @@ This project is based on:
 
 ## License
 
-Academic project — HIT, 2026. For educational use.
+Academic project — HIT, 2025. For educational use.
