@@ -191,4 +191,4 @@ This project is based on:
 
 ## License
 
-Academic project — HIT, 2025. For educational use.
+Academic project — HIT, 2026. For educational use.
